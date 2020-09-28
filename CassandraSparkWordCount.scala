@@ -4,7 +4,6 @@ import com.datastax.spark.connector.cql.CassandraConnector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 
-
 object CassandraSparkWordCount {
 
   val DEFAULT_KEYSPACE = "ybdemo";
@@ -21,8 +20,7 @@ object CassandraSparkWordCount {
         .set("spark.cassandra.connection.host", "127.0.0.1")
 
     val spark =
-      SparkSession
-        .builder
+      SparkSession.builder
         .config(conf)
         .getOrCreate
 
@@ -34,7 +32,6 @@ object CassandraSparkWordCount {
 
     // Create a Cassandra session, and initialize the keyspace.
     val session = connector.openSession
-
 
     //------------ Setting Input source (Cassandra table only) -------------\\
 
@@ -80,7 +77,6 @@ object CassandraSparkWordCount {
       session.execute(prepared.bind(new Integer(id), line))
     }
 
-
     //------------- Setting output location (Cassandra table) --------------\\
 
     val outTable = DEFAULT_KEYSPACE + "." + DEFAULT_OUTPUT_TABLENAME
@@ -98,22 +94,13 @@ object CassandraSparkWordCount {
       """
     )
 
-
     //--------------------- Read from Cassandra table ----------------------\\
 
     // Read rows from table as a DataFrame.
-    val df =
-      spark
-        .read
-        .format("org.apache.spark.sql.cassandra")
-        .options(
-          Map(
-            "keyspace" -> DEFAULT_KEYSPACE, // "ybdemo".
-            "table" -> DEFAULT_INPUT_TABLENAME // "lines".
-          )
-        )
-        .load
-
+    val df = spark.read
+      .format("org.apache.spark.sql.cassandra")
+      .options(Map("keyspace" -> DEFAULT_KEYSPACE, "table" -> DEFAULT_INPUT_TABLENAME))
+      .load
 
     //------------------------ Perform Word Count --------------------------\\
 
@@ -122,13 +109,13 @@ object CassandraSparkWordCount {
     // ----------------------------------------------------------------------
     // Example with RDD.
     val wordCountRdd =
-    df.select("line")
-      .rdd // reduceByKey() operates on PairRDDs. Start with a simple RDD.
-      // Similar to: https://spark.apache.org/examples.html
-      // vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-      .flatMap(x => x.getString(0).split(" ")) // This creates the PairRDD.
-      .map(word => (word, 1))
-      .reduceByKey(_ + _)
+      df.select("line")
+        .rdd // reduceByKey() operates on PairRDDs. Start with a simple RDD.
+        // Similar to: https://spark.apache.org/examples.html
+        // vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+        .flatMap(x => x.getString(0).split(" ")) // This creates the PairRDD.
+        .map(word => (word, 1))
+        .reduceByKey(_ + _)
     // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     // This is not used for saving, but it could be.
@@ -139,13 +126,13 @@ object CassandraSparkWordCount {
     // ----------------------------------------------------------------------
     // Example using DataFrame.
     val wordCountDf =
-    df.select("line")
-      .flatMap(x => x.getString(0).split(" "))
-      .groupBy("value").count // flatMap renames column to "value".
-      .toDF("word", "count") // rename columns.
+      df.select("line")
+        .flatMap(x => x.getString(0).split(" "))
+        .groupBy("value")
+        .count // flatMap renames column to "value".
+        .toDF("word", "count") // rename columns.
 
     wordCountDf.show
-
 
     //---------------------- Save to Cassandra table -----------------------\\
 
@@ -154,25 +141,18 @@ object CassandraSparkWordCount {
     // This has been tested to be fungible with the DataFrame->CQL code block.
 
     /* Comment this line out to enable this code block.
-    // This import (for this example) is only needed for the
-    // <RDD>.wordCountRdd.saveToCassandra() call.
-    import com.datastax.spark.connector._
-    wordCountRdd.saveToCassandra(
-      DEFAULT_KEYSPACE, // "ybdemo".
-      DEFAULT_OUTPUT_TABLENAME, // "wordcounts".
-      SomeColumns(
-        "word", // first column name.
-        "count" // second column name.
-      )
-    )
-    // */
+     * // This import (for this example) is only needed for the // <RDD>.wordCountRdd.saveToCassandra() call.
+     * import com.datastax.spark.connector._ wordCountRdd.saveToCassandra( DEFAULT_KEYSPACE, // "ybdemo".
+     * DEFAULT_OUTPUT_TABLENAME, // "wordcounts".
+     * SomeColumns( "word", // first column name.
+     * "count" // second column name.
+     * ) ) // */
 
     // ----------------------------------------------------------------------
     // Save the output to the YCQL table, using DataFrame as the source.
 
     // /* Uncomment this line out to disable this code block.
-    wordCountDf
-      .write
+    wordCountDf.write
       .format("org.apache.spark.sql.cassandra")
       .options(
         Map(
@@ -182,7 +162,6 @@ object CassandraSparkWordCount {
       )
       .save
     // */
-
 
     // ----------------------------------------------------------------------
     // Disconnect from Cassandra.
